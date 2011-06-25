@@ -58,12 +58,12 @@ module CarrierWave
           with_callbacks(:store, new_file) do
             new_file = storage.store!(@file)
             @file.delete if delete_tmp_file_after_storage
+            # but don't delete the cache dir here because all the version files may be there
             @file = new_file
-            @cache_id = nil
           end
         end
       end
-
+      
       ##
       # Retrieves the file from the storage.
       #
