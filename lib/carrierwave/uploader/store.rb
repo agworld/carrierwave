@@ -63,7 +63,6 @@ module CarrierWave
           end
         end
       end
-      
       ##
       # Retrieves the file from the storage.
       #
