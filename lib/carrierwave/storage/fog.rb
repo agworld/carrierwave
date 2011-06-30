@@ -120,7 +120,7 @@ module CarrierWave
         # [Hash] attributes from file
         #
         def attributes
-          file.attributes
+          file ? file.attributes : nil
         end
 
         ##
@@ -152,7 +152,7 @@ module CarrierWave
         # [String] value of content-type
         #
         def content_type
-          @content_type || file.content_type
+          @content_type || file ? file.content_type : nil
         end
 
         ##
@@ -215,7 +215,7 @@ module CarrierWave
         # [Integer] size of file body
         #
         def size
-          file.content_length
+          file ? file.content_length : nil
         end
 
         ##
