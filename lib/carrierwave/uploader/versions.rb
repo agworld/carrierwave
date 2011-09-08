@@ -92,8 +92,15 @@ module CarrierWave
             RUBY
             # as the processors get the output from the previous processors as their
             # input we must not stack the processors here
-            versions[name][:uploader].processors = versions[name][:uploader].processors.dup
-            versions[name][:uploader].processors.clear
+
+            # MP: This code was breaking our ability to have versions defined on a sub class
+            #     we need versions defined on a sub-class so they use the store_dir from the 
+            #     PrivateUploader in that case and so on.
+            #     I'm pretty sure that this code is here to try to stop some kind of issue where
+            #     versions use the output of previous versions for their input, but I can't
+            #     understand how this would be a good solution anyway...
+            #versions[name][:uploader].processors = versions[name][:uploader].processors.dup
+            #versions[name][:uploader].processors.clear
           end
           versions[name][:uploader].class_eval(&block) if block
           versions[name]
