@@ -28,7 +28,9 @@ describe CarrierWave::Uploader do
           version :micro
         end
       end
-      @uploader_class.versions.keys.should == [:large, :thumb]
+      @uploader_class.versions.should have(2).versions
+      @uploader_class.versions.should include :large
+      @uploader_class.versions.should include :thumb
       @uploader.large.versions.should be_empty
       @uploader.thumb.versions.keys.should == [:mini]
       @uploader.thumb.mini.versions.keys.should == [:micro]
@@ -109,6 +111,11 @@ describe CarrierWave::Uploader do
       @uploader_class.version(:thumb)[:uploader].llama.should == "llama"
     end
 
+    it "should accept option :from_version" do
+      @uploader_class.version :small_thumb, :from_version => :thumb
+      @uploader_class.version(:small_thumb)[:options][:from_version].should == :thumb
+    end
+
     describe 'with nested versions' do
       before do
         @uploader_class.version :thumb do
@@ -145,7 +152,7 @@ describe CarrierWave::Uploader do
 
           def rotate
             manipulate! do |img|
-              img.rotate 90
+              img.rotate "90"
               img
             end
           end
@@ -172,6 +179,7 @@ describe CarrierWave::Uploader do
       end
 
       it "should set store_path with versions" do
+        CarrierWave.should_receive(:generate_cache_id).once
         @uploader.cache!(File.open(file_path('test.jpg')))
         @uploader.store_path.should == 'uploads/test.jpg'
         @uploader.thumb.store_path.should == 'uploads/thumb_test.jpg'
@@ -179,11 +187,19 @@ describe CarrierWave::Uploader do
       end
 
       it "should move it to the tmp dir with the filename prefixed" do
+        CarrierWave.should_receive(:generate_cache_id).once
         @uploader.cache!(File.open(file_path('test.jpg')))
         @uploader.current_path.should == public_path('uploads/tmp/20071201-1234-345-2255/test.jpg')
         @uploader.thumb.current_path.should == public_path('uploads/tmp/20071201-1234-345-2255/thumb_test.jpg')
         @uploader.file.exists?.should be_true
         @uploader.thumb.file.exists?.should be_true
+      end
+
+      it "should cache the files based on the parent" do
+        CarrierWave.should_receive(:generate_cache_id).once
+        @uploader.cache!(File.open(file_path('bork.txt')))
+
+        File.read(public_path(@uploader.to_s)).should == File.read(public_path(@uploader.thumb.to_s))
       end
     end
 
@@ -276,7 +292,35 @@ describe CarrierWave::Uploader do
         @uploader.store!(@file)
         @uploader.thumb.should be_present
         @uploader.preview.should be_blank
-       end
+      end
+
+      it "should process conditional version if the condition block returns true" do
+        @uploader_class.version(:preview)[:options][:if] = lambda{|record, args| record.true?(args[:file])}
+        @uploader.should_receive(:true?).at_least(:once).and_return(true)
+        @uploader.store!(@file)
+        @uploader.thumb.should be_present
+        @uploader.preview.should be_present
+      end
+
+      it "should not process conditional versions if the condition block returns false" do
+        @uploader_class.version(:preview)[:options][:if] = lambda{|record, args| record.false?(args[:file])}
+        @uploader.should_receive(:false?).at_least(:once).and_return(false)
+        @uploader.store!(@file)
+        @uploader.thumb.should be_present
+        @uploader.preview.should be_blank
+      end
+
+      it "should not cache file twice when store! called with a file" do
+        @uploader_class.process :banana
+        @uploader.thumb.class.process :banana
+
+        @uploader.should_receive(:banana).at_least(:once).at_most(:once).and_return(true)
+        @uploader.thumb.should_receive(:banana).at_least(:once).at_most(:once).and_return(true)
+
+        @uploader.store!(@file)
+        @uploader.store_path.should == 'uploads/test.jpg'
+        @uploader.thumb.store_path.should == 'uploads/thumb_test.jpg'
+      end
     end
 
     describe '#recreate_versions!' do
@@ -359,7 +403,6 @@ describe CarrierWave::Uploader do
 
     end
 
-
     describe '#retrieve_from_store!' do
       before do
         @uploader_class.storage = mock_storage('base')
@@ -408,6 +451,36 @@ describe CarrierWave::Uploader do
       it "should not set the filename" do
         @uploader.retrieve_from_store!('monkey.txt')
         @uploader.filename.should be_nil
+      end
+    end
+  end
+
+  describe 'with a version with option :from_version' do
+    before do
+      @uploader_class.class_eval do
+        def upcase
+          content = File.read(current_path)
+          File.open(current_path, 'w') { |f| f.write content.upcase }
+        end
+      end
+
+      @uploader_class.version(:thumb) do
+        process :upcase
+      end
+
+      @uploader_class.version(:small_thumb, :from_version => :thumb)
+    end
+
+    describe '#cache!' do
+      before do
+        CarrierWave.stub!(:generate_cache_id).and_return('20071201-1234-345-2255')
+      end
+
+      it "should cache the files based on the version" do
+        @uploader.cache!(File.open(file_path('bork.txt')))
+
+        File.read(public_path(@uploader.to_s)).should_not == File.read(public_path(@uploader.thumb.to_s))
+        File.read(public_path(@uploader.thumb.to_s)).should == File.read(public_path(@uploader.small_thumb.to_s))
       end
     end
   end

@@ -47,11 +47,11 @@ module CarrierWave
         if file.respond_to?(:content_type=)
           file.content_type = new_content_type
         else
-          file.set_instance_variable(:@content_type, new_content_type)
+          file.instance_variable_set(:@content_type, new_content_type)
         end
       end
     rescue ::MIME::InvalidContentType => e
-      raise CarrierWave::ProcessingError.new("Failed to process file with MIME::Types, maybe not valid content-type? Original Error: #{e}")
+      raise CarrierWave::ProcessingError, I18n.translate(:"errors.messages.mime_types_processing_error", :e => e)
     end
 
   end # MimeTypes

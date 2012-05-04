@@ -73,4 +73,44 @@ describe CarrierWave::RMagick do
     end
   end
 
+  describe "#manipulate!" do
+    it 'should support passing write options to RMagick' do
+      image = ::Magick::Image.read(file_path('landscape_copy.jpg'))
+      ::Magick::Image.stub(:read => image)
+      ::Magick::Image::Info.any_instance.should_receive(:quality=).with(50)
+      ::Magick::Image::Info.any_instance.should_receive(:depth=).with(8)
+      
+      @instance.manipulate! do |img, index, options|
+        options[:write] = {
+          :quality => 50,
+          :depth => 8
+        }
+        img
+      end
+    end
+  end
+
+  describe "test errors" do
+    context "invalid image file" do
+      before do
+        File.open(@instance.current_path, 'w') do |f|
+          f.puts "bogus"
+        end
+      end
+
+      it "should fail to process a non image file" do
+        lambda {@instance.resize_to_limit(200, 200)}.should raise_exception(CarrierWave::ProcessingError, /^Failed to manipulate with rmagick, maybe it is not an image\? Original Error:/)
+      end
+
+      it "should use I18n" do
+        change_locale_and_store_translations(:nl, :errors => {
+          :messages => {
+            :rmagick_processing_error => "Kon bestand niet met rmagick bewerken, misschien is het geen beeld bestand? rmagick foutmelding: %{e}"
+          }
+        }) do
+          lambda {@instance.resize_to_limit(200, 200)}.should raise_exception(CarrierWave::ProcessingError, /^Kon bestand niet met rmagick bewerken, misschien is het geen beeld bestand\? rmagick foutmelding:/)
+        end
+      end
+    end
+  end
 end

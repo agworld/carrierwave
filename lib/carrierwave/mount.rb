@@ -21,15 +21,13 @@ module CarrierWave
     #
     def uploaders
       @uploaders ||= {}
-      @uploaders = superclass.uploaders.merge(@uploaders)
-    rescue NoMethodError
+      @uploaders = superclass.uploaders.merge(@uploaders) if superclass.respond_to?(:uploaders)
       @uploaders
     end
 
     def uploader_options
       @uploader_options ||= {}
-      @uploader_options = superclass.uploader_options.merge(@uploader_options)
-    rescue NoMethodError
+      @uploader_options = superclass.uploader_options.merge(@uploader_options) if superclass.respond_to?(:uploader_options)
       @uploader_options
     end
 
@@ -96,6 +94,7 @@ module CarrierWave
     #
     # [image_integrity_error]   Returns an error object if the last file to be assigned caused an integrity error
     # [image_processing_error]  Returns an error object if the last file to be assigned caused a processing error
+    # [image_download_error]    Returns an error object if the last file to be remotely assigned caused a download error
     #
     # [write_image_identifier]  Uses the write_uploader method to set the identifier.
     # [image_identifier]        Reads out the identifier of the file
@@ -227,6 +226,10 @@ module CarrierWave
           _mounter(:#{column}).processing_error
         end
 
+        def #{column}_download_error
+          _mounter(:#{column}).download_error
+        end
+
         def write_#{column}_identifier
           _mounter(:#{column}).write_identifier
         end
@@ -239,13 +242,18 @@ module CarrierWave
           serialization_column = _mounter(:#{column}).serialization_column
 
           if #{column}.remove_previously_stored_files_after_update && send(:"\#{serialization_column}_changed?")
-            @previous_model_for_#{column} = self.class.find(to_key.first)
+            @previous_model_for_#{column} ||= self.find_previous_model_for_#{column}
           end
+        end
+
+        def find_previous_model_for_#{column}
+          self.class.find(to_key.first)
         end
 
         def remove_previously_stored_#{column}
           if @previous_model_for_#{column} && @previous_model_for_#{column}.#{column}.path != #{column}.path
             @previous_model_for_#{column}.#{column}.remove!
+            @previous_model_for_#{column} = nil
           end
         end
 
@@ -278,9 +286,7 @@ module CarrierWave
     # this is an internal class, used by CarrierWave::Mount so that
     # we don't pollute the model with a lot of methods.
     class Mounter #:nodoc:
-      extend ActiveSupport::Memoizable
-
-      attr_reader :column, :record, :remote_url, :integrity_error, :processing_error
+      attr_reader :column, :record, :remote_url, :integrity_error, :processing_error, :download_error
       attr_accessor :remove
 
       def initialize(record, column, options={})
@@ -332,10 +338,22 @@ module CarrierWave
       end
 
       def remote_url=(url)
-        unless uploader.cached?
-          @remote_url = url
-          uploader.download!(url)
-        end
+        @download_error = nil
+        @integrity_error = nil
+
+        @remote_url = url
+        
+        uploader.download!(url)
+
+      rescue CarrierWave::DownloadError => e
+        @download_error = e
+        raise e unless option(:ignore_download_errors)
+      rescue CarrierWave::ProcessingError => e
+        @processing_error = e
+        raise e unless option(:ignore_processing_errors)
+      rescue CarrierWave::IntegrityError => e
+        @integrity_error = e
+        raise e unless option(:ignore_integrity_errors)
       end
 
       def store!
@@ -368,12 +386,14 @@ module CarrierWave
         option(:mount_on) || column
       end
 
+      attr_accessor :uploader_options
+
     private
 
       def option(name)
-        record.class.uploader_option(column, name)
+        self.uploader_options ||= {}
+        self.uploader_options[name] ||= record.class.uploader_option(column, name)
       end
-      memoize :option
 
     end # Mounter
 

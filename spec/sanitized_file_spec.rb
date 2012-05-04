@@ -1,6 +1,7 @@
 # encoding: utf-8
 
 require 'spec_helper'
+require 'mime/types'
 
 describe CarrierWave::SanitizedFile do
 
@@ -29,14 +30,6 @@ describe CarrierWave::SanitizedFile do
 
     it "should be empty for an empty StringIO" do
       @sanitized_file = CarrierWave::SanitizedFile.new(StringIO.new(""))
-      @sanitized_file.should be_empty
-    end
-
-    it "should be empty for a file with a zero size" do
-      FileUtils.rm file_path('llama.jpg')
-      FileUtils.touch file_path('llama.jpg')
-
-      @sanitized_file = CarrierWave::SanitizedFile.new(File.open(file_path('llama.jpg')))
       @sanitized_file.should be_empty
     end
 
@@ -162,8 +155,8 @@ describe CarrierWave::SanitizedFile do
 
     before do
       @sanitized_file = CarrierWave::SanitizedFile.new(nil)
-      regexp = RUBY_VERSION >= '1.9' ? '[^[:word:]\.\-\+]' : '[^ёЁа-яА-Яa-zA-Zà-üÀ-Ü0-9\.\-\+_]'
-      @sanitized_file.stub(:sanitize_regexp).and_return(Regexp.new(regexp))
+      regexp = RUBY_VERSION >= '1.9' ? Regexp.new('[^[:word:]\.\-\+]') : /[^éôёЁа-яА-Яa-zA-Zà-üÀ-Ü0-9\.\-\+_]/u
+      @sanitized_file.stub(:sanitize_regexp).and_return(regexp)
     end
 
     it "should default to the original filename if it is valid" do
@@ -187,6 +180,15 @@ describe CarrierWave::SanitizedFile do
     it "preserves file's content_type" do
       @sanitized_file = CarrierWave::SanitizedFile.new(:content_type => 'image/png')
       @sanitized_file.content_type.should == 'image/png'
+    end
+
+    it "should handle Mime::Type object" do
+      @file = File.open(file_path('sponsored.doc'))
+      @file.stub!(:content_type).and_return(MIME::Type.new('application/msword'))
+      @sanitized_file = CarrierWave::SanitizedFile.new(@file)
+      @sanitized_file.stub!(:file).and_return(@file)
+      lambda { @sanitized_file.content_type }.should_not raise_error
+      @sanitized_file.content_type.should == 'application/msword'
     end
   end
 
@@ -245,7 +247,7 @@ describe CarrierWave::SanitizedFile do
     describe '#move_to' do
 
       after do
-        FileUtils.rm(file_path('gurr.png'))
+        FileUtils.rm_f(file_path('gurr.png'))
       end
 
       it "should be moved to the correct location" do
@@ -279,12 +281,22 @@ describe CarrierWave::SanitizedFile do
         @sanitized_file.should have_permissions(0755)
       end
 
+      it "should set the right directory permissions" do
+        @sanitized_file.move_to(file_path('new_dir','gurr.png'), nil, 0775)
+        @sanitized_file.should have_directory_permissions(0775)
+        FileUtils.rm_rf(file_path('new_dir'))
+      end
+
+      it "should return itself" do
+        @sanitized_file.move_to(file_path('gurr.png')).should == @sanitized_file
+      end
+
     end
 
     describe '#copy_to' do
 
       after do
-        FileUtils.rm(file_path('gurr.png'))
+        FileUtils.rm_f(file_path('gurr.png'))
       end
 
       it "should be copied to the correct location" do
@@ -331,6 +343,12 @@ describe CarrierWave::SanitizedFile do
       it "should set the right permissions" do
         new_file = @sanitized_file.copy_to(file_path('gurr.png'), 0755)
         new_file.should have_permissions(0755)
+      end
+
+      it "should set the right directory permissions" do
+        new_file = @sanitized_file.copy_to(file_path('new_dir', 'gurr.png'), nil, 0755)
+        new_file.should have_directory_permissions(0755)
+        FileUtils.rm_rf(file_path('new_dir'))
       end
 
       it "should preserve the file's content type" do
@@ -381,6 +399,20 @@ describe CarrierWave::SanitizedFile do
         File.exists?(@sanitized_file.path).should be_true
         @sanitized_file.delete
         File.exists?(@sanitized_file.path).should be_false
+      end
+    end
+
+    describe '#to_file' do
+      it "should return a File object" do
+        @sanitized_file.to_file.should be_a(File)
+      end
+
+      it "should have the same path as the SanitizedFile" do
+        @sanitized_file.to_file.path.should == @sanitized_file.path
+      end
+
+      it "should have the same contents as the SantizedFile" do
+        @sanitized_file.to_file.read.should == @sanitized_file.read
       end
     end
   end
@@ -470,6 +502,12 @@ describe CarrierWave::SanitizedFile do
       end
     end
 
+    describe '#to_file' do
+      it "should be nil" do
+        @sanitized_file.to_file.should be_nil
+      end
+    end
+
   end
 
   describe "with a valid File object" do
@@ -480,6 +518,32 @@ describe CarrierWave::SanitizedFile do
     end
 
     it_should_behave_like "all valid sanitized files"
+
+    it_should_behave_like "all valid sanitized files that are stored on disk"
+
+    describe '#is_path?' do
+      it "should be false" do
+        @sanitized_file.is_path?.should be_false
+      end
+    end
+
+    describe '#path' do
+      it "should return the path of the file" do
+        @sanitized_file.path.should_not be_nil
+        @sanitized_file.path.should == file_path('llama.jpg')
+      end
+    end
+
+  end
+
+  describe "with a valid File object and an empty file" do
+    before do
+      FileUtils.cp(file_path('test.jpg'), file_path('llama.jpg'))
+      FileUtils.rm file_path('llama.jpg')
+      FileUtils.touch file_path('llama.jpg')
+      @sanitized_file = CarrierWave::SanitizedFile.new(stub_file('llama.jpg', 'image/jpeg'))
+      @sanitized_file.should_not be_empty
+    end
 
     it_should_behave_like "all valid sanitized files that are stored on disk"
 
@@ -614,6 +678,12 @@ describe CarrierWave::SanitizedFile do
         running { @empty.delete }.should_not raise_error
       end
     end
+
+    describe '#to_file' do
+      it "should be nil" do
+        @empty.to_file.should be_nil
+      end
+    end
   end
 
   describe "that is an empty string" do
@@ -678,6 +748,12 @@ describe CarrierWave::SanitizedFile do
     describe '#delete' do
       it "should not raise an error" do
         running { @empty.delete }.should_not raise_error
+      end
+    end
+
+    describe '#to_file' do
+      it "should be nil" do
+        @empty.to_file.should be_nil
       end
     end
   end

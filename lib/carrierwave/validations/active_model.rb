@@ -3,7 +3,6 @@
 require 'active_model/validator'
 require 'active_support/concern'
 
-
 module CarrierWave
 
   # == Active Model Presence Validator
@@ -14,8 +13,9 @@ module CarrierWave
       class ProcessingValidator < ::ActiveModel::EachValidator
 
         def validate_each(record, attribute, value)
-          if record.send("#{attribute}_processing_error")
-            record.errors.add(attribute, :carrierwave_processing_error)
+          if e = record.send("#{attribute}_processing_error")
+            message = (e.message == e.class.to_s) ? :carrierwave_processing_error : e.message
+            record.errors.add(attribute, message)
           end
         end
       end
@@ -23,8 +23,19 @@ module CarrierWave
       class IntegrityValidator < ::ActiveModel::EachValidator
 
         def validate_each(record, attribute, value)
-          if record.send("#{attribute}_integrity_error")
-            record.errors.add(attribute, :carrierwave_integrity_error)
+          if e = record.send("#{attribute}_integrity_error")
+            message = (e.message == e.class.to_s) ? :carrierwave_integrity_error : e.message
+            record.errors.add(attribute, message)
+          end
+        end
+      end
+
+      class DownloadValidator < ::ActiveModel::EachValidator
+
+        def validate_each(record, attribute, value)
+          if e = record.send("#{attribute}_download_error")
+            message = (e.message == e.class.to_s) ? :carrierwave_download_error : e.message
+            record.errors.add(attribute, message)
           end
         end
       end
@@ -36,14 +47,6 @@ module CarrierWave
         #
         # Accepts the usual parameters for validations in Rails (:if, :unless, etc...)
         #
-        # === Note
-        #
-        # Set this key in your translations file for I18n:
-        #
-        #     carrierwave:
-        #       errors:
-        #         integrity: 'Here be an error message'
-        #
         def validates_integrity_of(*attr_names)
           validates_with IntegrityValidator, _merge_attributes(attr_names)
         end
@@ -54,16 +57,17 @@ module CarrierWave
         #
         # Accepts the usual parameters for validations in Rails (:if, :unless, etc...)
         #
-        # === Note
-        #
-        # Set this key in your translations file for I18n:
-        #
-        #     carrierwave:
-        #       errors:
-        #         processing: 'Here be an error message'
-        #
         def validates_processing_of(*attr_names)
           validates_with ProcessingValidator, _merge_attributes(attr_names)
+        end
+        #
+        ##
+        # Makes the record invalid if the remote file couldn't be downloaded
+        #
+        # Accepts the usual parameters for validations in Rails (:if, :unless, etc...)
+        #
+        def validates_download_of(*attr_names)
+          validates_with DownloadValidator, _merge_attributes(attr_names)
         end
       end
 
@@ -76,4 +80,3 @@ module CarrierWave
 end
 
 I18n.load_path << File.join(File.dirname(__FILE__), "..", "locale", 'en.yml')
-

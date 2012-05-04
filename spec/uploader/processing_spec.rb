@@ -65,6 +65,65 @@ describe CarrierWave::Uploader do
       @uploader.process!("test.jpg")
     end
 
+    it "should call the processor if the condition block returns true" do
+      @uploader_class.process :resize => [200, 300], :if => lambda{|record, args| record.true?(args[:file])}
+      @uploader_class.process :fancy, :if => :true?
+      @uploader.should_receive(:true?).with("test.jpg").twice.and_return(true)
+      @uploader.should_receive(:resize).with(200, 300)
+      @uploader.should_receive(:fancy).with()
+      @uploader.process!("test.jpg")
+    end
+
+    it "should not call the processor if the condition block returns false" do
+      @uploader_class.process :resize => [200, 300], :if => lambda{|record, args| record.false?(args[:file])}
+      @uploader_class.process :fancy, :if => :false?
+      @uploader.should_receive(:false?).with("test.jpg").twice.and_return(false)
+      @uploader.should_not_receive(:resize)
+      @uploader.should_not_receive(:fancy)
+      @uploader.process!("test.jpg")
+    end
+    
+    context "when using RMagick" do
+      before do
+        def @uploader.cover
+          manipulate! { |frame, index| frame if index.zero? }
+        end
+
+        @uploader_class.send :include, CarrierWave::RMagick
+      end
+
+      after do
+        @uploader.instance_eval { undef cover }
+      end
+      
+      context "with a multi-page PDF" do
+        before do
+          @uploader.cache! File.open(file_path("multi_page.pdf"))
+        end
+
+        it "should successfully process" do
+          @uploader_class.process :convert => 'jpg'
+          @uploader.process!
+        end
+
+        it "should support page specific transformations" do
+          @uploader_class.process :cover
+          @uploader.process!
+        end
+      end
+
+      context "with a simple image" do
+        before do
+          @uploader.cache! File.open(file_path("portrait.jpg"))
+        end
+
+        it "should still allow page specific transformations" do
+          @uploader_class.process :cover
+          @uploader.process!
+        end
+      end
+    end
+
     context "with 'enable_processing' set to false" do
       it "should not do any processing" do
         @uploader_class.enable_processing = false

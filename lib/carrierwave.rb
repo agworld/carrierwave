@@ -4,18 +4,12 @@ require 'fileutils'
 require 'active_support/core_ext/object/blank'
 require 'active_support/core_ext/class/attribute'
 
-begin
-  require 'active_support/core_ext/class/inheritable_attributes'
-rescue LoadError
-end
-
 require 'active_support/concern'
-require 'active_support/memoizable'
 
 module CarrierWave
 
   class << self
-    attr_accessor :root
+    attr_accessor :root, :base_path
 
     def configure(&block)
       CarrierWave::Uploader::Base.configure(&block)
@@ -44,10 +38,6 @@ module CarrierWave
     autoload :Abstract, 'carrierwave/storage/abstract'
     autoload :File, 'carrierwave/storage/file'
     autoload :Fog, 'carrierwave/storage/fog'
-    autoload :S3, 'carrierwave/storage/s3'
-    autoload :GridFS, 'carrierwave/storage/grid_fs'
-    autoload :RightS3, 'carrierwave/storage/right_s3'
-    autoload :CloudFiles, 'carrierwave/storage/cloud_files'
   end
 
   module Uploader
@@ -65,6 +55,7 @@ module CarrierWave
     autoload :Url, 'carrierwave/uploader/url'
     autoload :Mountable, 'carrierwave/uploader/mountable'
     autoload :Configuration, 'carrierwave/uploader/configuration'
+    autoload :Serialization, 'carrierwave/uploader/serialization'
   end
 
   module Compatibility
@@ -92,6 +83,7 @@ elsif defined?(Rails)
     class Railtie < Rails::Railtie
       initializer "carrierwave.setup_paths" do
         CarrierWave.root = Rails.root.join(Rails.public_path).to_s
+        CarrierWave.base_path = ENV['RAILS_RELATIVE_URL_ROOT']
       end
 
       initializer "carrierwave.active_record" do
@@ -103,11 +95,17 @@ elsif defined?(Rails)
   end
 
 elsif defined?(Sinatra)
+  if defined?(Padrino) && defined?(PADRINO_ROOT)
+    CarrierWave.root = File.join(PADRINO_ROOT, "public")
+  else
 
-  CarrierWave.root = Sinatra::Application.public
+    CarrierWave.root = if Sinatra::Application.respond_to?(:public_folder)
+      # Sinatra >= 1.3
+      Sinatra::Application.public_folder
+    else
+      # Sinatra < 1.3
+      Sinatra::Application.public
+    end
+  end
 
 end
-
-require 'carrierwave/orm/datamapper' if defined?(DataMapper)
-require 'carrierwave/orm/sequel' if defined?(Sequel)
-require 'carrierwave/orm/mongoid' if defined?(Mongoid)

@@ -53,11 +53,11 @@ module CarrierWave
       # [new_file (File, IOString, Tempfile)] any kind of file object
       #
       def store!(new_file=nil)
-        cache!(new_file) if new_file
+        cache!(new_file) if new_file && ((@cache_id != parent_cache_id) || @cache_id.nil?)
         if @file and @cache_id
           with_callbacks(:store, new_file) do
             new_file = storage.store!(@file)
-            @file.delete if delete_tmp_file_after_storage
+            @file.delete if (delete_tmp_file_after_storage && ! move_to_store)
             # but don't delete the cache dir here because all the version files may be there
             @file = new_file
           end
