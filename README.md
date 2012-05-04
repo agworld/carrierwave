@@ -5,6 +5,12 @@ It works well with Rack based web applications, such as Ruby on Rails.
 
 [![Build Status](https://secure.travis-ci.org/jnicklas/carrierwave.png)](http://travis-ci.org/jnicklas/carrierwave)
 
+## Agworld fixes
+
+1. Don't explode with nil exceptions when there's no attachment and size, content_type or attributes are called (simple)
+1. Change the way the cache dir is deleted so it doesn't fail when there are versions
+1. Fix handling of versions for sub-classes of uploaders, this is a complex fix and may actually break when there are multiple versions, needs a spec to test that
+
 ## Information
 
 * RDoc documentation [available on RubyDoc.info](http://rubydoc.info/gems/carrierwave/frames)
