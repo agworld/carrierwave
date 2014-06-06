@@ -278,7 +278,6 @@ module CarrierWave
     # this is an internal class, used by CarrierWave::Mount so that
     # we don't pollute the model with a lot of methods.
     class Mounter #:nodoc:
-      extend ActiveSupport::Memoizable
 
       attr_reader :column, :record, :remote_url, :integrity_error, :processing_error
       attr_accessor :remove
@@ -371,9 +370,9 @@ module CarrierWave
     private
 
       def option(name)
-        record.class.uploader_option(column, name)
+        @_option_cache ||= []
+        @_option_cache[name] ||= record.class.uploader_option(column, name)
       end
-      memoize :option
 
     end # Mounter
 
