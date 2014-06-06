@@ -370,7 +370,7 @@ module CarrierWave
     private
 
       def option(name)
-        @_option_cache ||= []
+        @_option_cache ||= {}
         @_option_cache[name] ||= record.class.uploader_option(column, name)
       end
 
